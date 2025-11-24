@@ -1,0 +1,7 @@
+# Redirect rules for testing
+/old-path /new-path 302
+/user/:id /profile/:id 302
+/api/* /v2/api/:splat 301
+
+# Rewrite for SPA
+/* /index.html 200

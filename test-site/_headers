@@ -1,0 +1,11 @@
+# Header rules for testing
+
+# Cache static assets aggressively
+/static/*
+  Cache-Control: public, max-age=31536000, immutable
+  # Prevent MIME type sniffing
+  X-Content-Type-Options: nosniff
+
+# Security headers for all pages
+/*
+  X-Frame-Options: DENY
