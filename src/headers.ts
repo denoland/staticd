@@ -18,6 +18,7 @@ const DISALLOWED_HEADERS = new Set([
   "allow",
   "alt-svc",
   "connection",
+  "proxy-connection",
   "content-encoding",
   "content-length",
   "content-range",
@@ -26,6 +27,7 @@ const DISALLOWED_HEADERS = new Set([
   "trailer",
   "transfer-encoding",
   "upgrade",
+  "keep-alive",
 ]);
 
 /**
