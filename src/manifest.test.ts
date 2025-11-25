@@ -34,7 +34,6 @@ Deno.test("generateManifest - creates manifest with all files", async () => {
   const manifest = await generateManifest(testDir);
 
   assertEquals(manifest.version, 1);
-  assertEquals(manifest.root, testDir);
   assertEquals(typeof manifest.generatedAt, "string");
 
   // Check files
@@ -95,7 +94,6 @@ Deno.test("writeManifest and readManifest - round trip", async () => {
   const loaded = await readManifest(manifestPath);
 
   assertEquals(loaded.version, manifest.version);
-  assertEquals(loaded.root, manifest.root);
   assertEquals(Object.keys(loaded.files).length, Object.keys(manifest.files).length);
   assertEquals(loaded.redirects.length, manifest.redirects.length);
   assertEquals(loaded.headers.length, manifest.headers.length);
@@ -105,7 +103,7 @@ Deno.test("writeManifest and readManifest - round trip", async () => {
 
 Deno.test("ManifestFs - get() returns file handle for existing file", async () => {
   const manifest = await generateManifest(testDir);
-  const fs = new ManifestFs(manifest);
+  const fs = new ManifestFs(manifest, testDir);
 
   const handle = await fs.get(join(testDir, "index.html"));
 
@@ -120,7 +118,7 @@ Deno.test("ManifestFs - get() returns file handle for existing file", async () =
 
 Deno.test("ManifestFs - get() returns null for non-existent file", async () => {
   const manifest = await generateManifest(testDir);
-  const fs = new ManifestFs(manifest);
+  const fs = new ManifestFs(manifest, testDir);
 
   const handle = await fs.get(join(testDir, "nonexistent.html"));
 
@@ -129,7 +127,7 @@ Deno.test("ManifestFs - get() returns null for non-existent file", async () => {
 
 Deno.test("ManifestFs - get() returns dir handle for directory", async () => {
   const manifest = await generateManifest(testDir);
-  const fs = new ManifestFs(manifest);
+  const fs = new ManifestFs(manifest, testDir);
 
   const handle = await fs.get(join(testDir, "static"));
 
@@ -139,7 +137,7 @@ Deno.test("ManifestFs - get() returns dir handle for directory", async () => {
 
 Deno.test("ManifestFs - can open and read file", async () => {
   const manifest = await generateManifest(testDir);
-  const fs = new ManifestFs(manifest);
+  const fs = new ManifestFs(manifest, testDir);
 
   const handle = await fs.get(join(testDir, "index.html"));
 
@@ -169,7 +167,7 @@ Deno.test("manifestHeadersToRules - converts to HeaderRule objects", async () =>
   const rules = manifestHeadersToRules(manifest.headers);
 
   assertEquals(rules.length, 1);
-  assertEquals(rules[0].pattern, "/static/*");
+  assertEquals(rules[0].pattern.pathname, "/static/*");
   assertEquals(rules[0].headers.length, 2);
 });
 

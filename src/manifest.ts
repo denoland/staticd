@@ -30,8 +30,6 @@ export interface ManifestFile {
 export interface Manifest {
   /** Version of the manifest format */
   version: number;
-  /** Root directory that was scanned */
-  root: string;
   /** Timestamp when manifest was generated (ISO 8601) */
   generatedAt: string;
   /** Map of file paths to file information */
@@ -147,7 +145,7 @@ export async function generateManifest(root: string): Promise<Manifest> {
     const rules = parseHeaders(content);
     for (const rule of rules) {
       headers.push({
-        pattern: rule.pattern,
+        pattern: rule.pattern.pathname,
         headers: rule.headers,
       });
     }
@@ -159,7 +157,6 @@ export async function generateManifest(root: string): Promise<Manifest> {
 
   return {
     version: 1,
-    root,
     generatedAt: new Date().toISOString(),
     files,
     directories: Array.from(directories).sort(),
@@ -192,9 +189,9 @@ export class ManifestFs implements Fs {
   private manifest: Manifest;
   private root: string;
 
-  constructor(manifest: Manifest) {
+  constructor(manifest: Manifest, root: string) {
     this.manifest = manifest;
-    this.root = manifest.root;
+    this.root = root;
   }
 
   // deno-lint-ignore require-await
@@ -271,7 +268,7 @@ export function manifestRedirectsToRules(redirects: Manifest["redirects"]): Redi
  */
 export function manifestHeadersToRules(headers: Manifest["headers"]): HeaderRule[] {
   return headers.map((h) => ({
-    pattern: h.pattern,
+    pattern: new URLPattern({ pathname: h.pattern }),
     headers: h.headers,
   }));
 }

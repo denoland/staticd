@@ -1,11 +1,22 @@
 import { assertEquals } from "@std/assert";
-import { applyHeaders, headerPatternToURLPattern, type HeaderRule, matchHeaders, parseHeaders } from "./headers.ts";
+import { applyHeaders, type HeaderRule, matchHeaders, parseHeaders } from "./headers.ts";
+
+// Helper function to assert header rules, extracting pathname from URLPattern
+function assertHeaders(
+  actual: HeaderRule[],
+  expected: Array<{ pattern: string; headers: Array<[string, string]> }>,
+) {
+  assertEquals(
+    actual.map((r) => ({ pattern: r.pattern.pathname, headers: r.headers })),
+    expected,
+  );
+}
 
 Deno.test("parseHeaders - single path with single header", () => {
   const content = `/static/*
   X-Content-Type-Options: nosniff`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [["X-Content-Type-Options", "nosniff"]],
@@ -18,7 +29,7 @@ Deno.test("parseHeaders - single path with multiple headers", () => {
   X-Content-Type-Options: nosniff
   Cache-Control: max-age=31536000`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [
@@ -36,7 +47,7 @@ Deno.test("parseHeaders - multiple paths", () => {
 /api/*
   Cache-Control: no-cache`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [["X-Content-Type-Options", "nosniff"]],
@@ -53,7 +64,7 @@ Deno.test("parseHeaders - multiple values for same header", () => {
   X-Custom-Header: value1
   X-Custom-Header: value2`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [
@@ -69,7 +80,7 @@ Deno.test("parseHeaders - handles various whitespace", () => {
   X-Content-Type-Options:nosniff
     Cache-Control:  max-age=31536000  `;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [
@@ -88,7 +99,7 @@ Deno.test("parseHeaders - empty lines between sections", () => {
 /api/*
   Cache-Control: no-cache`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [["X-Content-Type-Options", "nosniff"]],
@@ -107,7 +118,7 @@ Deno.test("parseHeaders - specific path patterns", () => {
 /static/css/*
   Cache-Control: max-age=31536000`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/index.html",
       headers: [["Cache-Control", "no-cache"]],
@@ -123,7 +134,7 @@ Deno.test("parseHeaders - complex header values with colons", () => {
   const content = `/api/*
   Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/api/*",
       headers: [["Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.example.com"]],
@@ -155,7 +166,7 @@ Deno.test("parseHeaders - comments", () => {
 /api/*
   Cache-Control: no-cache`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [
@@ -178,7 +189,7 @@ Deno.test("parseHeaders - disallowed headers are filtered out", () => {
   Content-Length: 1234
   Transfer-Encoding: chunked`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/static/*",
       headers: [
@@ -195,7 +206,7 @@ Deno.test("parseHeaders - disallowed headers case insensitive", () => {
   ALT-SVC: h2=":443"
   X-Frame-Options: DENY`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/api/*",
       headers: [
@@ -206,40 +217,28 @@ Deno.test("parseHeaders - disallowed headers case insensitive", () => {
   ]);
 });
 
-Deno.test("headerPatternToURLPattern - converts wildcard", () => {
-  const pattern = "/static/*";
-  const urlPattern = headerPatternToURLPattern(pattern);
-  assertEquals(urlPattern, "/static/:splat*");
-});
-
-Deno.test("headerPatternToURLPattern - exact path", () => {
-  const pattern = "/index.html";
-  const urlPattern = headerPatternToURLPattern(pattern);
-  assertEquals(urlPattern, "/index.html");
-});
-
 Deno.test("matchHeaders - simple wildcard match", () => {
-  const rules: HeaderRule[] = [{ pattern: "/static/*", headers: [["Cache-Control", "max-age=31536000"]] }];
+  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/static/*" }), headers: [["Cache-Control", "max-age=31536000"]] }];
   const matched = matchHeaders("/static/style.css", rules);
   assertEquals(matched, [["Cache-Control", "max-age=31536000"]]);
 });
 
 Deno.test("matchHeaders - exact path match", () => {
-  const rules: HeaderRule[] = [{ pattern: "/index.html", headers: [["Cache-Control", "no-cache"]] }];
+  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/index.html" }), headers: [["Cache-Control", "no-cache"]] }];
   const matched = matchHeaders("/index.html", rules);
   assertEquals(matched, [["Cache-Control", "no-cache"]]);
 });
 
 Deno.test("matchHeaders - no match", () => {
-  const rules: HeaderRule[] = [{ pattern: "/static/*", headers: [["Cache-Control", "max-age=31536000"]] }];
+  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/static/*" }), headers: [["Cache-Control", "max-age=31536000"]] }];
   const matched = matchHeaders("/api/data", rules);
   assertEquals(matched, []);
 });
 
 Deno.test("matchHeaders - multiple matching rules", () => {
   const rules: HeaderRule[] = [
-    { pattern: "/static/*", headers: [["Cache-Control", "max-age=31536000"]] },
-    { pattern: "/static/css/*", headers: [["X-Content-Type-Options", "nosniff"]] },
+    { pattern: new URLPattern({ pathname: "/static/*" }), headers: [["Cache-Control", "max-age=31536000"]] },
+    { pattern: new URLPattern({ pathname: "/static/css/*" }), headers: [["X-Content-Type-Options", "nosniff"]] },
   ];
   const matched = matchHeaders("/static/css/style.css", rules);
   assertEquals(matched, [
@@ -250,7 +249,7 @@ Deno.test("matchHeaders - multiple matching rules", () => {
 
 Deno.test("matchHeaders - multiple headers from one rule", () => {
   const rules: HeaderRule[] = [{
-    pattern: "/api/*",
+    pattern: new URLPattern({ pathname: "/api/*" }),
     headers: [["Cache-Control", "no-cache"], ["X-Content-Type-Options", "nosniff"]],
   }];
   const matched = matchHeaders("/api/users", rules);
@@ -304,7 +303,7 @@ Deno.test("parseHeaders - realistic example", () => {
 /*.html
   Cache-Control: no-cache`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/",
       headers: [
@@ -342,7 +341,7 @@ Deno.test("parseHeaders - no whitespace between paths", () => {
 /*.html
   Cache-Control: no-cache`;
   const rules = parseHeaders(content);
-  assertEquals(rules, [
+  assertHeaders(rules, [
     {
       pattern: "/",
       headers: [

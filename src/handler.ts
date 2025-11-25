@@ -28,6 +28,8 @@ export interface ServerOptions {
   trailingSlash: TrailingSlashBehavior;
   /** Optional filesystem implementation (defaults to SystemFs) */
   fs?: Fs;
+  /** Add s-maxage to Cache-Control headers (value in seconds) */
+  cacheControlMaxAge?: number;
 }
 
 /**
@@ -88,9 +90,20 @@ function resolvePath(root: string, requestPath: string): string | null {
  * @returns A request handler function
  */
 export function createHandler(options: ServerOptions) {
-  const { root, spa, redirectRules, headerRules, trailingSlash } = options;
+  const { root, spa, redirectRules, headerRules, trailingSlash, cacheControlMaxAge } = options;
 
   const fs = options.fs ?? new SystemFs();
+
+  function applyCacheControl(response: Response) {
+    if (cacheControlMaxAge !== undefined) {
+      const existingCacheControl = response.headers.get("Cache-Control");
+      if (existingCacheControl && !existingCacheControl.includes("s-maxage")) {
+        response.headers.set("Cache-Control", `${existingCacheControl}, s-maxage=${cacheControlMaxAge}`);
+      } else if (!existingCacheControl) {
+        response.headers.set("Cache-Control", `s-maxage=${cacheControlMaxAge}`);
+      }
+    }
+  }
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -144,7 +157,11 @@ export function createHandler(options: ServerOptions) {
         for (const [queryKey] of rule.queryCaptures) url.searchParams.delete(queryKey);
         redirectUrl.search = url.search;
 
-        return Response.redirect(redirectUrl.toString(), rule.status);
+        const response = Response.redirect(redirectUrl.toString(), rule.status);
+        const matchedHeaders = matchHeaders(pathname, headerRules);
+        applyHeaders(response.headers, matchedHeaders);
+        applyCacheControl(response);
+        return response;
       }
     }
 
@@ -152,6 +169,8 @@ export function createHandler(options: ServerOptions) {
       const response = await serveFile(request, handle);
       const matchedHeaders = matchHeaders(pathname, headerRules);
       applyHeaders(response.headers, matchedHeaders);
+      applyCacheControl(response);
+
       return response;
     }
 

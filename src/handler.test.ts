@@ -260,6 +260,48 @@ Deno.test("handler - supports HEAD requests", async () => {
   assertEquals(response.body, null);
 });
 
+Deno.test("handler - adds s-maxage to Cache-Control", async () => {
+  const handler = createHandler({
+    root: testDir,
+    spa: false,
+    redirectRules: [],
+    headerRules: [],
+    trailingSlash: TrailingSlashBehavior.Ignore,
+    cacheControlMaxAge: 31536000,
+  });
+
+  const request = new Request("http://localhost/index.html");
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  const cacheControl = response.headers.get("Cache-Control");
+  assertEquals(cacheControl, "s-maxage=31536000");
+
+  await response.text();
+});
+
+Deno.test("handler - appends s-maxage to existing Cache-Control", async () => {
+  const headerRules = parseHeaders("/static/*\n  Cache-Control: max-age=3600");
+
+  const handler = createHandler({
+    root: testDir,
+    spa: false,
+    redirectRules: [],
+    headerRules,
+    trailingSlash: TrailingSlashBehavior.Ignore,
+    cacheControlMaxAge: 31536000,
+  });
+
+  const request = new Request("http://localhost/static/style.css");
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  const cacheControl = response.headers.get("Cache-Control");
+  assertEquals(cacheControl, "max-age=3600, s-maxage=31536000");
+
+  await response.text();
+});
+
 // Cleanup
 Deno.test("cleanup", async () => {
   await Deno.remove(testDir, { recursive: true });

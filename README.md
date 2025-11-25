@@ -11,29 +11,28 @@ local directory, with advanced features like caching, redirects, rewrite rules, 
 - Automatic MIME type detection
 - Automatic ETag and If-None-Match support
 
+## Installation
+
+```bash
+deno install -grf --allow-net --allow-read jsr:@deno/staticd@1
+```
+
 ## Usage
 
 ```bash
-deno run --allow-net --allow-read jsr:@deno/staticd@1 ./public
+staticd ./public
 ```
 
 To enable SPA mode, add the `--spa` flag:
 
 ```bash
-deno run --allow-net --allow-read jsr:@deno/staticd@1 --spa ./public
+staticd --spa ./public
 ```
 
 You can also specify a custom port using the `--port` flag (default is 8080):
 
 ```bash
-deno run --allow-net --allow-read jsr:@deno/staticd@1 --port=3000 ./public
-```
-
-To install staticd as a global command, use:
-
-```bash
-deno install -grf --allow-net --allow-read staticd jsr:@deno/staticd@1
-staticd ./public
+staticd --port=3000 ./public
 ```
 
 ## Manifest Generation (Performance Optimization)
@@ -48,13 +47,13 @@ For faster server startup, especially with large sites, you can pre-generate a m
 ### Generate a manifest
 
 ```bash
-deno run --allow-read --allow-write jsr:@deno/staticd@1 manifest --output=dist.manifest.json ./dist
+staticd manifest --output=dist.manifest.json ./dist
 ```
 
 ### Serve using a manifest
 
 ```bash
-deno run --allow-net --allow-read jsr:@deno/staticd@1 --manifest=dist.manifest.json ./dist
+staticd --manifest=dist.manifest.json ./dist
 ```
 
 When using a manifest, the server:
@@ -64,7 +63,8 @@ When using a manifest, the server:
 - Loads redirect and header rules instantly
 - Significantly reduces startup time for large sites
 
-The manifest is a JSON file that should be generated as part of your build process.
+The manifest is a portable JSON file that contains no absolute paths, making it safe to check into version control and
+reusable across different deployment environments. Generate it as part of your build process.
 
 ## Configuration
 
@@ -83,6 +83,17 @@ The manifest is a JSON file that should be generated as part of your build proce
 
 `--manifest=<path>`: Load a pre-generated manifest file instead of scanning the filesystem. Use the `manifest` command
 to generate one.
+
+`--cache-control-max-age=<seconds>`: Add `s-maxage` to all `Cache-Control` headers. This is useful for CDN caching. The
+value is in seconds (e.g., `31536000` for 1 year). If a file already has a `Cache-Control` header (from `_headers`), the
+`s-maxage` directive will be appended to it, if no `s-maxage` is already present.
+
+Example:
+
+```bash
+# Set 1 year CDN cache for all files
+deno run --allow-net --allow-read jsr:@deno/staticd@1 --cache-control-max-age=31536000 ./dist
+```
 
 ### `_redirects`
 

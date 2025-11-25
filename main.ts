@@ -65,6 +65,7 @@ SERVE OPTIONS:
     --spa                        Enable SPA mode
     --trailing-slash=<mode>      Handle trailing slashes: force, never, or ignore (default: ignore)
     --manifest=<path>            Load pre-generated manifest file instead of scanning filesystem
+    --cache-control-max-age=<s>  Add s-maxage to Cache-Control headers (in seconds, e.g., 31536000 for 1 year)
     --help                       Show this help message
 
 MANIFEST OPTIONS:
@@ -165,7 +166,7 @@ export async function main(args: string[]) {
 
   const parsed = parseArgs(args, {
     boolean: ["spa", "help"],
-    string: ["port", "trailing-slash", "manifest"],
+    string: ["port", "trailing-slash", "manifest", "cache-control-max-age"],
     default: {
       port: "8080",
       "trailing-slash": "ignore",
@@ -229,6 +230,16 @@ export async function main(args: string[]) {
     Deno.exit(1);
   }
 
+  // Parse cache-control-max-age
+  let cacheControlMaxAge: number | undefined;
+  if (parsed["cache-control-max-age"]) {
+    cacheControlMaxAge = parseInt(String(parsed["cache-control-max-age"]), 10);
+    if (isNaN(cacheControlMaxAge) || cacheControlMaxAge < 0) {
+      console.error(`Error: Invalid cache-control-max-age: ${parsed["cache-control-max-age"]}`);
+      Deno.exit(1);
+    }
+  }
+
   // Load configuration files - either from manifest or by scanning filesystem
   let redirectRules;
   let headerRules;
@@ -242,16 +253,9 @@ export async function main(args: string[]) {
 
     const manifest = await readManifest(manifestPath);
 
-    // Validate manifest root matches requested root
-    if (manifest.root !== root) {
-      console.warn(
-        `Warning: Manifest root (${manifest.root}) differs from requested root (${root})`,
-      );
-    }
-
     redirectRules = manifestRedirectsToRules(manifest.redirects);
     headerRules = manifestHeadersToRules(manifest.headers);
-    fs = new ManifestFs(manifest);
+    fs = new ManifestFs(manifest, root);
 
     const fileCount = Object.keys(manifest.files).length;
     const duration = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -271,7 +275,7 @@ export async function main(args: string[]) {
   }
 
   // Create the request handler
-  const handler = createHandler({ root, spa, redirectRules, headerRules, trailingSlash, fs });
+  const handler = createHandler({ root, spa, redirectRules, headerRules, trailingSlash, fs, cacheControlMaxAge });
 
   // Start the server
   console.log(`\nStarting server...`);
@@ -279,6 +283,9 @@ export async function main(args: string[]) {
   console.log(`  - Port: ${port}`);
   console.log(`  - SPA mode: ${spa ? "enabled" : "disabled"}`);
   console.log(`  - Trailing slash: ${trailingSlash}`);
+  if (cacheControlMaxAge !== undefined) {
+    console.log(`  - Cache-Control s-maxage: ${cacheControlMaxAge} seconds`);
+  }
   console.log(`\nListening on http://localhost:${port}/`);
 
   Deno.serve({

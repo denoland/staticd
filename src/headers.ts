@@ -3,7 +3,7 @@
  */
 export interface HeaderRule {
   /** The path pattern (may contain wildcards). */
-  pattern: string;
+  pattern: URLPattern;
   /** Array of header key-value pairs. */
   headers: Array<[string, string]>;
 }
@@ -62,7 +62,15 @@ export function parseHeaders(content: string): HeaderRule[] {
     if (!line.match(/^\s/)) {
       // Save the previous rule if it exists, and start a new rule
       if (currentRule && currentRule.headers.length > 0) rules.push(currentRule);
-      currentRule = { pattern: trimmedLine, headers: [] };
+      let pattern: URLPattern;
+      try {
+        pattern = new URLPattern({ pathname: trimmedLine });
+      } catch {
+        console.warn(`Invalid path pattern at line ${i + 1}: ${line}`);
+        currentRule = null;
+        continue;
+      }
+      currentRule = { pattern, headers: [] };
     } else {
       // This is a header line (starts with whitespace)
       if (!currentRule) {
@@ -98,18 +106,6 @@ export function parseHeaders(content: string): HeaderRule[] {
 }
 
 /**
- * Convert a header pattern to a URLPattern string.
- * Converts * to :splat for URLPattern matching.
- *
- * @param pattern - The header pattern (e.g., "/static/*")
- * @returns URLPattern-compatible pathname pattern
- */
-export function headerPatternToURLPattern(pattern: string): string {
-  // Replace * with :splat* for URLPattern
-  return pattern.replace(/\*/g, ":splat*");
-}
-
-/**
  * Match a request path against header rules and return all matching headers.
  * Multiple rules can match, and their headers are combined.
  *
@@ -117,28 +113,12 @@ export function headerPatternToURLPattern(pattern: string): string {
  * @param rules - Array of header rules to match against
  * @returns Array of all matching headers
  */
-export function matchHeaders(
-  pathname: string,
-  rules: HeaderRule[],
-): Array<[string, string]> {
+export function matchHeaders(pathname: string, rules: HeaderRule[]): Array<[string, string]> {
   const matchedHeaders: Array<[string, string]> = [];
 
   for (const rule of rules) {
-    try {
-      // Create URLPattern for the pattern
-      const patternString = headerPatternToURLPattern(rule.pattern);
-      const pattern = new URLPattern({ pathname: patternString });
-
-      // Try to match
-      const match = pattern.exec({ pathname });
-
-      if (match) {
-        // Add all headers from this rule
-        matchedHeaders.push(...rule.headers);
-      }
-    } catch (error) {
-      console.warn(`Error matching header pattern ${rule.pattern}:`, error);
-    }
+    const match = rule.pattern.exec({ pathname });
+    if (match) matchedHeaders.push(...rule.headers);
   }
 
   return matchedHeaders;
