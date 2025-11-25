@@ -14,9 +14,15 @@ function parseRangeHeader(
   rangeHeader: string,
   fileSize: number,
 ): { start: number; end: number } | null {
-  const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
-  if (!match) {
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || !(match[1] || match[2])) {
     return null;
+  }
+
+  if (!match[1]) {
+    const suffixLength = parseInt(match[2], 10);
+    const start = Math.max(0, fileSize - suffixLength);
+    return isNaN(suffixLength) ? null : { start, end: fileSize - 1 };
   }
 
   const start = parseInt(match[1], 10);
