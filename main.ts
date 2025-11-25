@@ -5,6 +5,15 @@ import { join, resolve } from "@std/path";
 import { createHandler, TrailingSlashBehavior } from "./src/handler.ts";
 import { parseHeaders } from "./src/headers.ts";
 import { parseRedirects } from "./src/redirects.ts";
+import { SystemFs } from "./src/sys.ts";
+import {
+  generateManifest,
+  ManifestFs,
+  manifestHeadersToRules,
+  manifestRedirectsToRules,
+  readManifest,
+  writeManifest,
+} from "./src/manifest.ts";
 
 /**
  * Load and parse the _redirects file from the root directory.
@@ -47,11 +56,19 @@ function printUsage() {
 USAGE:
     deno run --allow-net --allow-read jsr:@deno/staticd@1 [OPTIONS] <directory>
 
-OPTIONS:
+COMMANDS:
+    serve                        Start the server (default command)
+    manifest                     Generate a manifest file
+
+SERVE OPTIONS:
     --port=<number>              Port to listen on (default: 8080)
     --spa                        Enable SPA mode
     --trailing-slash=<mode>      Handle trailing slashes: force, never, or ignore (default: ignore)
+    --manifest=<path>            Load pre-generated manifest file instead of scanning filesystem
     --help                       Show this help message
+
+MANIFEST OPTIONS:
+    --output=<path>              Output path for manifest file (default: staticd.manifest.json)
 
 EXAMPLES:
     # Serve the current directory
@@ -60,18 +77,95 @@ EXAMPLES:
     # Serve with SPA mode on port 3000
     deno run --allow-net --allow-read jsr:@deno/staticd@1 --spa --port=3000 ./dist
 
-    # Force trailing slashes
-    deno run --allow-net --allow-read jsr:@deno/staticd@1 --trailing-slash=force ./public
+    # Generate a manifest file
+    deno run --allow-read --allow-write jsr:@deno/staticd@1 manifest --output=dist.manifest.json ./dist
+
+    # Serve using a pre-generated manifest (faster startup)
+    deno run --allow-net --allow-read jsr:@deno/staticd@1 --manifest=dist.manifest.json ./dist
 `);
+}
+
+/**
+ * Generate a manifest file for the given directory.
+ */
+async function generateManifestCommand(args: string[]) {
+  const parsed = parseArgs(args, {
+    boolean: ["help"],
+    string: ["output"],
+    default: {
+      output: "staticd.manifest.json",
+    },
+    alias: {
+      h: "help",
+      o: "output",
+    },
+  });
+
+  if (parsed.help) {
+    printUsage();
+    return;
+  }
+
+  const directory = parsed._[0];
+  if (!directory) {
+    console.error("Error: No directory specified\n");
+    printUsage();
+    Deno.exit(1);
+  }
+
+  const root = resolve(String(directory));
+
+  // Validate the directory exists
+  try {
+    const stat = await Deno.stat(root);
+    if (!stat.isDirectory) {
+      console.error(`Error: ${root} is not a directory`);
+      Deno.exit(1);
+    }
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      console.error(`Error: Directory ${root} does not exist`);
+      Deno.exit(1);
+    }
+    throw error;
+  }
+
+  const outputPath = String(parsed.output);
+
+  console.log(`Generating manifest for ${root}...`);
+  const startTime = performance.now();
+
+  const manifest = await generateManifest(root);
+
+  const fileCount = Object.keys(manifest.files).length;
+  const redirectCount = manifest.redirects.length;
+  const headerCount = manifest.headers.length;
+
+  await writeManifest(manifest, outputPath);
+
+  const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+
+  console.log(`\nManifest generated successfully in ${duration}s`);
+  console.log(`  - Files: ${fileCount}`);
+  console.log(`  - Redirects: ${redirectCount}`);
+  console.log(`  - Headers: ${headerCount}`);
+  console.log(`  - Output: ${outputPath}`);
 }
 
 /**
  * Main function to start the server.
  */
 export async function main(args: string[]) {
+  // Check if first argument is a command
+  const command = args[0];
+  if (command === "manifest") {
+    await generateManifestCommand(args.slice(1));
+    return;
+  }
+
   const parsed = parseArgs(args, {
     boolean: ["spa", "help"],
-    string: ["port", "trailing-slash"],
+    string: ["port", "trailing-slash", "manifest"],
     default: {
       port: "8080",
       "trailing-slash": "ignore",
@@ -135,16 +229,49 @@ export async function main(args: string[]) {
     Deno.exit(1);
   }
 
-  // Load configuration files
-  console.log(`Loading configuration from ${root}...`);
-  const redirectRules = await loadRedirects(root);
-  const headerRules = await loadHeaders(root);
+  // Load configuration files - either from manifest or by scanning filesystem
+  let redirectRules;
+  let headerRules;
+  let fs;
 
-  console.log(`  - Loaded ${redirectRules.length} redirect rules`);
-  console.log(`  - Loaded ${headerRules.length} header rules`);
+  const manifestPath = parsed.manifest ? String(parsed.manifest) : null;
+
+  if (manifestPath) {
+    console.log(`Loading manifest from ${manifestPath}...`);
+    const startTime = performance.now();
+
+    const manifest = await readManifest(manifestPath);
+
+    // Validate manifest root matches requested root
+    if (manifest.root !== root) {
+      console.warn(
+        `Warning: Manifest root (${manifest.root}) differs from requested root (${root})`,
+      );
+    }
+
+    redirectRules = manifestRedirectsToRules(manifest.redirects);
+    headerRules = manifestHeadersToRules(manifest.headers);
+    fs = new ManifestFs(manifest);
+
+    const fileCount = Object.keys(manifest.files).length;
+    const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+
+    console.log(`  - Loaded manifest in ${duration}s`);
+    console.log(`  - Files: ${fileCount}`);
+    console.log(`  - Redirects: ${redirectRules.length}`);
+    console.log(`  - Headers: ${headerRules.length}`);
+  } else {
+    console.log(`Loading configuration from ${root}...`);
+    redirectRules = await loadRedirects(root);
+    headerRules = await loadHeaders(root);
+    fs = new SystemFs();
+
+    console.log(`  - Loaded ${redirectRules.length} redirect rules`);
+    console.log(`  - Loaded ${headerRules.length} header rules`);
+  }
 
   // Create the request handler
-  const handler = createHandler({ root, spa, redirectRules, headerRules, trailingSlash });
+  const handler = createHandler({ root, spa, redirectRules, headerRules, trailingSlash, fs });
 
   // Start the server
   console.log(`\nStarting server...`);

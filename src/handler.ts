@@ -4,7 +4,7 @@ import { join } from "@std/path/posix/join";
 import { serveFile } from "./file_server.ts";
 import { applyHeaders, type HeaderRule, matchHeaders } from "./headers.ts";
 import { matchRedirect, type RedirectRule } from "./redirects.ts";
-import { SystemFs } from "./sys.ts";
+import { type Fs, SystemFs } from "./sys.ts";
 
 export enum TrailingSlashBehavior {
   Force = "force",
@@ -26,6 +26,8 @@ export interface ServerOptions {
   headerRules: HeaderRule[];
   /** Trailing slash behavior: "force", "never", or "ignore" */
   trailingSlash: TrailingSlashBehavior;
+  /** Optional filesystem implementation (defaults to SystemFs) */
+  fs?: Fs;
 }
 
 /**
@@ -88,7 +90,7 @@ function resolvePath(root: string, requestPath: string): string | null {
 export function createHandler(options: ServerOptions) {
   const { root, spa, redirectRules, headerRules, trailingSlash } = options;
 
-  const fs = new SystemFs();
+  const fs = options.fs ?? new SystemFs();
 
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
