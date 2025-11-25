@@ -157,7 +157,10 @@ export function createHandler(options: ServerOptions) {
         for (const [queryKey] of rule.queryCaptures) url.searchParams.delete(queryKey);
         redirectUrl.search = url.search;
 
-        const response = Response.redirect(redirectUrl.toString(), rule.status);
+        const response = new Response("", {
+          status: rule.status,
+          headers: { Location: redirectUrl.toString() },
+        });
         const matchedHeaders = matchHeaders(pathname, headerRules);
         applyHeaders(response.headers, matchedHeaders);
         applyCacheControl(response);

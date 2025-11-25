@@ -95,6 +95,8 @@ Example:
 deno run --allow-net --allow-read jsr:@deno/staticd@1 --cache-control-max-age=31536000 ./dist
 ```
 
+`--quiet` or `-q`: Suppress all startup log output except the "Listening on" message.
+
 ### `_redirects`
 
 The `_redirects` file allows you to define redirect and rewrite rules. Each line should contain a source path and a

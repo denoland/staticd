@@ -66,6 +66,7 @@ SERVE OPTIONS:
     --trailing-slash=<mode>      Handle trailing slashes: force, never, or ignore (default: ignore)
     --manifest=<path>            Load pre-generated manifest file instead of scanning filesystem
     --cache-control-max-age=<s>  Add s-maxage to Cache-Control headers (in seconds, e.g., 31536000 for 1 year)
+    --quiet, -q                  Suppress all startup log output except "Listening on" message
     --help                       Show this help message
 
 MANIFEST OPTIONS:
@@ -165,7 +166,7 @@ export async function main(args: string[]) {
   }
 
   const parsed = parseArgs(args, {
-    boolean: ["spa", "help"],
+    boolean: ["spa", "help", "quiet"],
     string: ["port", "trailing-slash", "manifest", "cache-control-max-age"],
     default: {
       port: "8080",
@@ -174,6 +175,7 @@ export async function main(args: string[]) {
     alias: {
       h: "help",
       p: "port",
+      q: "quiet",
     },
   });
 
@@ -217,6 +219,7 @@ export async function main(args: string[]) {
   }
 
   const spa = Boolean(parsed.spa);
+  const quiet = Boolean(parsed.quiet);
 
   const trailingSlash = String(parsed["trailing-slash"]) as TrailingSlashBehavior;
   if (
@@ -248,7 +251,6 @@ export async function main(args: string[]) {
   const manifestPath = parsed.manifest ? String(parsed.manifest) : null;
 
   if (manifestPath) {
-    console.log(`Loading manifest from ${manifestPath}...`);
     const startTime = performance.now();
 
     const manifest = await readManifest(manifestPath);
@@ -257,43 +259,44 @@ export async function main(args: string[]) {
     headerRules = manifestHeadersToRules(manifest.headers);
     fs = new ManifestFs(manifest, root);
 
-    const fileCount = Object.keys(manifest.files).length;
-    const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+    if (!quiet) {
+      const fileCount = Object.keys(manifest.files).length;
+      const duration = ((performance.now() - startTime) / 1000).toFixed(2);
 
-    console.log(`  - Loaded manifest in ${duration}s`);
-    console.log(`  - Files: ${fileCount}`);
-    console.log(`  - Redirects: ${redirectRules.length}`);
-    console.log(`  - Headers: ${headerRules.length}`);
+      console.log(
+        `Loaded manifest (${fileCount} files, ${redirectRules.length} redirects, ${headerRules.length} headers) in ${duration}s`,
+      );
+    }
   } else {
-    console.log(`Loading configuration from ${root}...`);
+    if (!quiet) {
+      console.log(`Loading configuration from ${root}...`);
+    }
     redirectRules = await loadRedirects(root);
     headerRules = await loadHeaders(root);
     fs = new SystemFs();
 
-    console.log(`  - Loaded ${redirectRules.length} redirect rules`);
-    console.log(`  - Loaded ${headerRules.length} header rules`);
+    if (!quiet) {
+      console.log(`  - Loaded ${redirectRules.length} redirect rules`);
+      console.log(`  - Loaded ${headerRules.length} header rules`);
+    }
   }
 
   // Create the request handler
   const handler = createHandler({ root, spa, redirectRules, headerRules, trailingSlash, fs, cacheControlMaxAge });
 
   // Start the server
-  console.log(`\nStarting server...`);
-  console.log(`  - Root directory: ${root}`);
-  console.log(`  - Port: ${port}`);
-  console.log(`  - SPA mode: ${spa ? "enabled" : "disabled"}`);
-  console.log(`  - Trailing slash: ${trailingSlash}`);
-  if (cacheControlMaxAge !== undefined) {
-    console.log(`  - Cache-Control s-maxage: ${cacheControlMaxAge} seconds`);
+  if (!quiet) {
+    console.log(`\nStarting server...`);
+    console.log(`  - Root directory: ${root}`);
+    console.log(`  - Port: ${port}`);
+    console.log(`  - SPA mode: ${spa ? "enabled" : "disabled"}`);
+    console.log(`  - Trailing slash: ${trailingSlash}`);
+    if (cacheControlMaxAge !== undefined) {
+      console.log(`  - Cache-Control s-maxage: ${cacheControlMaxAge} seconds`);
+    }
   }
-  console.log(`\nListening on http://localhost:${port}/`);
 
-  Deno.serve({
-    port,
-    onListen: () => {
-      // Already logged above
-    },
-  }, handler);
+  Deno.serve({ port }, handler);
 }
 
 // Run the main function if this is the main module
