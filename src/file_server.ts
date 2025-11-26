@@ -36,6 +36,35 @@ function parseRangeHeader(
 }
 
 /**
+ * Check if a resource has been modified since the given date.
+ *
+ * @param header - The If-Modified-Since header value
+ * @param mtime - The file's modification time (Date object, ISO 8601 string, or undefined)
+ * @returns true if modified, false if not modified (304 should be returned)
+ */
+function IfModifiedSince(
+  header: string,
+  mtime: null | string | Date,
+): boolean {
+  // No mtime available, consider it modified
+  if (!mtime) return true;
+
+  try {
+    const ifModifiedSince = new Date(header);
+    const lastModified = mtime instanceof Date ? mtime : new Date(mtime);
+
+    // HTTP date headers have 1-second precision, so we floor to seconds
+    const ifModifiedSinceSeconds = Math.floor(ifModifiedSince.getTime() / 1000);
+    const lastModifiedSeconds = Math.floor(lastModified.getTime() / 1000);
+    return isNaN(ifModifiedSinceSeconds) || isNaN(lastModifiedSeconds) ||
+      lastModifiedSeconds > ifModifiedSinceSeconds;
+  } catch {
+    // If parsing fails, consider it modified
+    return true;
+  }
+}
+
+/**
  * Generate an ETag for a file.
  *
  * @param fileInfo - The file information
@@ -93,6 +122,12 @@ export async function serveFile(
   // Check If-None-Match (ETag validation)
   const ifNoneMatchHeader = request.headers.get("If-None-Match");
   if (ifNoneMatchHeader && !ifNoneMatch(ifNoneMatchHeader, etag)) return new Response(null, { status: 304, headers });
+
+  // Check If-Modified-Since (Time based validation)
+  const ifModifiedSinceHeader = request.headers.get("If-Modified-Since");
+  if (ifModifiedSinceHeader && !IfModifiedSince(ifModifiedSinceHeader, handle.stat.mtime)) {
+    return new Response(null, { status: 304, headers });
+  }
 
   // Handle Range requests
   const rangeHeader = request.headers.get("Range");
