@@ -130,8 +130,8 @@ export async function serveFile(
   }
 
   // Handle Range requests
-  const rangeHeader = request.headers.get("Range");
-  if (rangeHeader) {
+  const rangeHeader = request.headers.get("Range")?.trim();
+  if (rangeHeader && rangeHeader.startsWith("bytes=")) {
     const range = parseRangeHeader(rangeHeader, handle.stat.size);
     if (!range) {
       return new Response("Range Not Satisfiable", {
@@ -148,8 +148,8 @@ export async function serveFile(
     headers.set("Content-Range", `bytes ${start}-${end}/${handle.stat.size}`);
     headers.set("Content-Length", contentLength.toString());
 
-    // For HEAD requests, don't read the file
-    if (request.method === "HEAD") {
+    // For zero-length response don't open the file
+    if (request.method == "HEAD" || contentLength === 0) {
       return new Response(null, { status: 206, headers });
     }
 
