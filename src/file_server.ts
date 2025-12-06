@@ -2,6 +2,7 @@ import { contentType } from "@std/media-types";
 import { extname } from "@std/path";
 import { ifNoneMatch } from "@std/http/etag";
 import type { FileHandle } from "./sys.ts";
+import { isImage, optimizeImage, parseImageOptimizationOptions } from "./image_optimizer.ts";
 
 /**
  * Parse the Range header from a request.
@@ -49,6 +50,17 @@ function generateETag(fileInfo: Deno.FileInfo): string {
 }
 
 /**
+ * Generate a content-based ETag for a file using SHA-256.
+ */
+export async function generateContentETag(content: Uint8Array<ArrayBuffer>): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", content.buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Use first 16 characters for a reasonable length ETag
+  return `"${hashHex.slice(0, 16)}"`;
+}
+
+/**
  * Serve a file as an HTTP response.
  *
  * @param request - The HTTP request
@@ -57,6 +69,7 @@ function generateETag(fileInfo: Deno.FileInfo): string {
  */
 export async function serveFile(
   request: Request,
+  searchParams: URLSearchParams,
   handle: FileHandle,
 ): Promise<Response> {
   // Only support GET and HEAD methods
@@ -64,15 +77,32 @@ export async function serveFile(
     return new Response("Method Not Allowed", { status: 405, headers: { "Allow": "GET, HEAD" } });
   }
 
-  // Initialize response headers
-  const headers = new Headers({
-    "server": "deno",
-    "accept-ranges": "bytes",
-  });
-
-  // Set Content-Type based on file extension
   const ext = extname(handle.name);
   const mimeType = contentType(ext);
+
+  const headers = new Headers({
+    "server": "deno",
+  });
+
+  if (isImage(mimeType ?? "") && searchParams.has("o")) {
+    const optimizationOptions = parseImageOptimizationOptions(searchParams);
+    // We only optimize images smaller than 10MB
+    if (handle.stat.size <= 10 * 1024 * 1024) {
+      const stream = await handle.open();
+      const bytes = await new Response(stream).bytes();
+      const optimized = await optimizeImage(bytes, optimizationOptions);
+      headers.set("Content-Length", optimized.data.byteLength.toString());
+      headers.set("Content-Type", optimized.contentType);
+      headers.set("ETag", optimized.etag);
+      if (handle.stat.mtime) {
+        headers.set("Last-Modified", handle.stat.mtime.toUTCString());
+      }
+      if (request.method === "HEAD") return new Response(null, { status: 200, headers });
+      return new Response(optimized.data, { status: 200, headers });
+    }
+  }
+
+  // Initialize response headers
   if (mimeType) headers.set("Content-Type", mimeType);
 
   // Get ETag, or generate if not present
@@ -89,6 +119,7 @@ export async function serveFile(
   if (ifNoneMatchHeader && !ifNoneMatch(ifNoneMatchHeader, etag)) return new Response(null, { status: 304, headers });
 
   // Handle Range requests
+  headers.set("Accept-Ranges", "bytes");
   const rangeHeader = request.headers.get("Range");
   if (rangeHeader) {
     const range = parseRangeHeader(rangeHeader, handle.stat.size);

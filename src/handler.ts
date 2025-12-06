@@ -169,7 +169,7 @@ export function createHandler(options: ServerOptions) {
     }
 
     if (handle && handle.kind === "file") {
-      const response = await serveFile(request, handle);
+      const response = await serveFile(request, url.searchParams, handle);
       const matchedHeaders = matchHeaders(pathname, headerRules);
       applyHeaders(response.headers, matchedHeaders);
       applyCacheControl(response);
