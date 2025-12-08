@@ -375,3 +375,72 @@ Deno.test("parseHeaders - no whitespace between paths", () => {
     },
   ]);
 });
+
+Deno.test("parseHeaders - disallows keep-alive header", () => {
+  const content = `/api/*
+  X-Custom-Header: allowed
+  Keep-Alive: timeout=5
+  Cache-Control: no-cache`;
+  const rules = parseHeaders(content);
+  assertHeaders(rules, [
+    {
+      pattern: "/api/*",
+      headers: [
+        ["X-Custom-Header", "allowed"],
+        ["Cache-Control", "no-cache"],
+      ],
+    },
+  ]);
+});
+
+Deno.test("parseHeaders - disallows proxy-connection header", () => {
+  const content = `/static/*
+  Cache-Control: max-age=31536000
+  Proxy-Connection: keep-alive
+  X-Content-Type-Options: nosniff`;
+  const rules = parseHeaders(content);
+  assertHeaders(rules, [
+    {
+      pattern: "/static/*",
+      headers: [
+        ["Cache-Control", "max-age=31536000"],
+        ["X-Content-Type-Options", "nosniff"],
+      ],
+    },
+  ]);
+});
+
+Deno.test("parseHeaders - disallows connection header", () => {
+  const content = `/api/*
+  Cache-Control: no-cache
+  Connection: close
+  X-Frame-Options: DENY`;
+  const rules = parseHeaders(content);
+  assertHeaders(rules, [
+    {
+      pattern: "/api/*",
+      headers: [
+        ["Cache-Control", "no-cache"],
+        ["X-Frame-Options", "DENY"],
+      ],
+    },
+  ]);
+});
+
+Deno.test("parseHeaders - disallows keep-alive and proxy-connection case insensitive", () => {
+  const content = `/static/*
+  KEEP-ALIVE: timeout=5
+  keep-alive: timeout=10
+  Proxy-Connection: keep-alive
+  PROXY-CONNECTION: close
+  Cache-Control: max-age=31536000`;
+  const rules = parseHeaders(content);
+  assertHeaders(rules, [
+    {
+      pattern: "/static/*",
+      headers: [
+        ["Cache-Control", "max-age=31536000"],
+      ],
+    },
+  ]);
+});
