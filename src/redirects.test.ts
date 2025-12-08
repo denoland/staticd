@@ -1,10 +1,5 @@
 import { assertEquals } from "@std/assert";
-import {
-  applySubstitutions,
-  matchRedirect,
-  parseRedirects,
-  type RedirectRule,
-} from "./redirects.ts";
+import { applySubstitutions, matchRedirect, parseRedirects, type RedirectRule } from "./redirects.ts";
 
 // Helper function to assert redirect rules, extracting pathname from URLPattern
 function assertRedirects(
@@ -12,7 +7,13 @@ function assertRedirects(
   expected: Array<{ from: string; to: string; status: number; force: boolean; queryCaptures: Array<[string, string]> }>,
 ) {
   assertEquals(
-    actual.map((r) => ({ from: r.from.pathname, to: r.to, status: r.status, force: r.force, queryCaptures: r.queryCaptures })),
+    actual.map((r) => ({
+      from: r.from.pathname,
+      to: r.to,
+      status: r.status,
+      force: r.force,
+      queryCaptures: r.queryCaptures,
+    })),
     expected,
   );
 }
