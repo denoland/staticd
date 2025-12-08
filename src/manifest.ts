@@ -9,6 +9,7 @@ import { basename } from "@std/path/posix/basename";
 import type { Fs, FsHandle } from "./sys.ts";
 import { type HeaderRule, parseHeaders } from "./headers.ts";
 import { parseRedirects, type RedirectRule } from "./redirects.ts";
+import { generateContentETag } from "./file_server.ts";
 
 /**
  * Information about a file in the manifest.
@@ -52,18 +53,6 @@ export interface Manifest {
 }
 
 /**
- * Generate a content-based ETag for a file using SHA-256.
- */
-async function generateContentETag(filePath: string): Promise<string> {
-  const fileContent = await Deno.readFile(filePath);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", fileContent);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  // Use first 16 characters for a reasonable length ETag
-  return `"${hashHex.slice(0, 16)}"`;
-}
-
-/**
  * Recursively scan a directory and collect file and directory information.
  */
 async function scanDirectory(
@@ -91,7 +80,8 @@ async function scanDirectory(
       }
 
       const stat = await Deno.stat(fullPath);
-      const etag = await generateContentETag(fullPath);
+      const fileContent = await Deno.readFile(fullPath);
+      const etag = await generateContentETag(fileContent);
 
       files[relativePath] = {
         path: relativePath,
