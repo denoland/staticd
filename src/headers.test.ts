@@ -218,19 +218,28 @@ Deno.test("parseHeaders - disallowed headers case insensitive", () => {
 });
 
 Deno.test("matchHeaders - simple wildcard match", () => {
-  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/static/*" }), headers: [["Cache-Control", "max-age=31536000"]] }];
+  const rules: HeaderRule[] = [{
+    pattern: new URLPattern({ pathname: "/static/*" }),
+    headers: [["Cache-Control", "max-age=31536000"]],
+  }];
   const matched = matchHeaders("/static/style.css", rules);
   assertEquals(matched, [["Cache-Control", "max-age=31536000"]]);
 });
 
 Deno.test("matchHeaders - exact path match", () => {
-  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/index.html" }), headers: [["Cache-Control", "no-cache"]] }];
+  const rules: HeaderRule[] = [{
+    pattern: new URLPattern({ pathname: "/index.html" }),
+    headers: [["Cache-Control", "no-cache"]],
+  }];
   const matched = matchHeaders("/index.html", rules);
   assertEquals(matched, [["Cache-Control", "no-cache"]]);
 });
 
 Deno.test("matchHeaders - no match", () => {
-  const rules: HeaderRule[] = [{ pattern: new URLPattern({ pathname: "/static/*" }), headers: [["Cache-Control", "max-age=31536000"]] }];
+  const rules: HeaderRule[] = [{
+    pattern: new URLPattern({ pathname: "/static/*" }),
+    headers: [["Cache-Control", "max-age=31536000"]],
+  }];
   const matched = matchHeaders("/api/data", rules);
   assertEquals(matched, []);
 });
