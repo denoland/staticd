@@ -14,9 +14,15 @@ function parseRangeHeader(
   rangeHeader: string,
   fileSize: number,
 ): { start: number; end: number } | null {
-  const match = rangeHeader.match(/^bytes=(\d+)-(\d*)$/);
-  if (!match) {
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || !(match[1] || match[2])) {
     return null;
+  }
+
+  if (!match[1]) {
+    const suffixLength = parseInt(match[2], 10);
+    const start = Math.max(0, fileSize - suffixLength);
+    return isNaN(suffixLength) ? null : { start, end: fileSize - 1 };
   }
 
   const start = parseInt(match[1], 10);
@@ -89,8 +95,8 @@ export async function serveFile(
   if (ifNoneMatchHeader && !ifNoneMatch(ifNoneMatchHeader, etag)) return new Response(null, { status: 304, headers });
 
   // Handle Range requests
-  const rangeHeader = request.headers.get("Range");
-  if (rangeHeader) {
+  const rangeHeader = request.headers.get("Range")?.trim();
+  if (rangeHeader && rangeHeader.startsWith("bytes=")) {
     const range = parseRangeHeader(rangeHeader, handle.stat.size);
     if (!range) {
       return new Response("Range Not Satisfiable", {
@@ -107,8 +113,8 @@ export async function serveFile(
     headers.set("Content-Range", `bytes ${start}-${end}/${handle.stat.size}`);
     headers.set("Content-Length", contentLength.toString());
 
-    // For HEAD requests, don't read the file
-    if (request.method === "HEAD") {
+    // For zero-length response don't open the file
+    if (request.method == "HEAD" || contentLength === 0) {
       return new Response(null, { status: 206, headers });
     }
 
