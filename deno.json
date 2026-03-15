@@ -1,7 +1,8 @@
 {
   "name": "@deno/staticd",
   "version": "0.1.0",
-  "exports": "./mod.ts",
+  "license": "MIT",
+  "exports": "./main.ts",
   "tasks": {
     "test": "deno test --allow-read --allow-write --allow-net"
   },
@@ -14,6 +15,5 @@
   },
   "fmt": {
     "lineWidth": 120
-  },
-  "license": "MIT"
+  }
 }
