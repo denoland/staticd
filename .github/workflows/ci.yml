@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Deno
         uses: denoland/setup-deno@v2
@@ -28,3 +28,21 @@ jobs:
 
       - name: Run tests
         run: deno test -A
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [test]
+
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+
+      - name: Publish to JSR
+        run: deno publish
